@@ -1,4 +1,4 @@
-__version__ = '0.1.0'
+__version__ = "0.1.0"
 
 import colorama
 import crayons
@@ -8,6 +8,7 @@ import sys
 
 from lxml import etree
 from pathlib import Path
+from typing import List
 
 colorama.init()
 
@@ -90,19 +91,21 @@ class ValidationResult:
 
 
 class Mode:
-    def __init__(self, name, directories, is_repo):
+    def __init__(
+        self, name: str, directories: List[Path], is_repo: bool
+    ) -> None:
         self.name = name
         self.directories = directories
         self.is_repo = is_repo
 
 
 class CIException(Exception):
-    def __init__(self, message):
+    def __init__(self, message: str) -> None:
         super(CIException, self).__init__(message)
 
 
 class ValidationException(CIException):
-    def __init__(self, message, object_name):
+    def __init__(self, message: str, object_name: str) -> None:
         super(ValidationException, self).__init__(
             f"{object_name} - failed validating: {message}"
         )
@@ -135,11 +138,11 @@ class ValidationPipeline:
     BIXPRESS_CONNECTION_NAME = "OLEDB_BIxPress_1"
     ERROR_EVENT_NAME = "SSISOpsEhObj_Package_OnError"
 
-    def __init__(self, mode):
-        self.mode = mode
-        self.validated_projects = None
+    def __init__(self, mode: Mode) -> None:
+        self.mode: Mode = mode
+        self.validated_projects: List[object] = []
 
-    def run(self):
+    def run(self) -> None:
         try:
             changed_projects = (
                 self._get_repo_changes(self.mode.directories[0])
@@ -153,7 +156,7 @@ class ValidationPipeline:
         except:
             raise
 
-    def _get_dir_dtproj_files(self, directories):
+    def _get_dir_dtproj_files(self, directories: List[Path]) -> List[Path]:
         projects = []
         for directory in directories:
             if not directory.exists():
@@ -162,9 +165,11 @@ class ValidationPipeline:
                 projects.append(dtproj)
         return projects
 
-    def _get_repo_changes(self, current_directory):
+    def _get_repo_changes(self, current_directory: Path) -> List[Path]:
         if not (current_directory / ".git").exists():
-            raise CIException("No repository found, place executable inside a repository")
+            raise CIException(
+                "No repository found, place executable inside a repository"
+            )
 
         return [
             Path(x.a_path)
@@ -172,7 +177,7 @@ class ValidationPipeline:
             if Path(x.a_path).suffix == ".dtproj"
         ]
 
-    def _get_ssis_projects(self, projects):
+    def _get_ssis_projects(self, projects: List[Path]) -> List[SSISProject]:
         dtproj_files = [SSISProject(dtproj.stem, dtproj) for dtproj in projects]
 
         if not dtproj_files:
@@ -219,7 +224,7 @@ class ValidationPipeline:
         return parsed_xml
 
     @staticmethod
-    def _parse_dtproj_file(dtproj):
+    def _parse_dtproj_file(dtproj: SSISProject) -> SSISProject:
         parsed_xml = ValidationPipeline._read_xml_file(dtproj.path, "utf-8")
 
         ssis_namespace = {"SSIS": "www.microsoft.com/SqlServer/SSIS"}
@@ -251,11 +256,8 @@ class ValidationPipeline:
         # SSISProject.deployment_model
         deployment_model = parsed_xml.xpath("//DeploymentModel")
         dtproj_deployment_model = (
-            None
-            if not deployment_model
-            else deployment_model[0].text
+            None if not deployment_model else deployment_model[0].text
         )
-
 
         # SSISProject.protection_level
         protection_level_tree = parsed_xml.xpath(
@@ -302,10 +304,12 @@ class ValidationPipeline:
             dtproj_incorrectly_linked,
             dtproj_target_server_version,
             dtproj_protection_level,
-            dtproj_deployment_model
+            dtproj_deployment_model,
         )
 
-    def _process_dtproj_files(self, projects):
+    def _process_dtproj_files(
+        self, projects: List[SSISProject]
+    ) -> List[SSISProject]:
         parsed_projects = []
         for dtproj in projects:
             logger.info(f"o  Processing: {dtproj.name}")
@@ -317,7 +321,7 @@ class ValidationPipeline:
         return parsed_projects
 
     @staticmethod
-    def _parse_dtsx_file(package):
+    def _parse_dtsx_file(package: SSISPackage) -> SSISPackage:
         try:
             parsed_xml = ValidationPipeline._read_xml_file(
                 package.path, "utf-8-sig"
@@ -411,14 +415,16 @@ class ValidationPipeline:
             package.bix_option_no_report_fail,
         )
 
-    def _process_dtsx_files(self, projects):
+    def _process_dtsx_files(self, projects: List[SSISProject]) -> None:
         for dtproj in projects:
             packages = []
             for package in dtproj.packages:
                 packages.append(ValidationPipeline._parse_dtsx_file(package))
             dtproj.packages = packages
 
-    def validate_dtproj_server_version(self, project):
+    def validate_dtproj_server_version(
+        self, project: SSISProject
+    ) -> Validation:
         validation = Validation()
         if not project.target_server_version:
             validation.successful = False
@@ -449,7 +455,9 @@ class ValidationPipeline:
 
         return validation
 
-    def validate_dtproj_protection_level(self, project):
+    def validate_dtproj_protection_level(
+        self, project: SSISProject
+    ) -> Validation:
         validation = Validation()
         if (
             not project.protection_level
@@ -469,7 +477,7 @@ class ValidationPipeline:
             )
         return validation
 
-    def validate_dtproj_packages(self, project):
+    def validate_dtproj_packages(self, project: SSISProject) -> Validation:
         validation = Validation()
         if not project.packages:
             validation.successful = False
@@ -479,7 +487,9 @@ class ValidationPipeline:
         validation.message = f"+ {project.path.name} - successfully validated: linked packages are present"
         return validation
 
-    def validate_dtproj_package_linking(self, project):
+    def validate_dtproj_package_linking(
+        self, project: SSISProject
+    ) -> Validation:
         validation = Validation()
         if project.incorrectly_linked:
             validation.successful = False
@@ -492,7 +502,7 @@ class ValidationPipeline:
 
         return validation
 
-    def validate_deployment_model(self, project):
+    def validate_deployment_model(self, project: SSISProject) -> Validation:
         validation = Validation()
         if project.deployment_model is None:
             validation.successful = False
@@ -506,7 +516,7 @@ class ValidationPipeline:
 
         return validation
 
-    def validate_dtsx_version(self, package):
+    def validate_dtsx_version(self, package: SSISPackage) -> Validation:
         validation = Validation()
         if (
             package.last_modified_version is None
@@ -528,7 +538,7 @@ class ValidationPipeline:
 
         return validation
 
-    def validate_dtsx_protection(self, package):
+    def validate_dtsx_protection(self, package: SSISPackage) -> Validation:
         validation = Validation()
         if package.protection_level is None or package.protection_level != 2:
             validation.successful = False
@@ -542,7 +552,7 @@ class ValidationPipeline:
             )
         return validation
 
-    def validate_dtsx_bix_con(self, package):
+    def validate_dtsx_bix_con(self, package: SSISPackage) -> Validation:
         validation = Validation()
 
         if not package.bix_con_name:
@@ -566,7 +576,9 @@ class ValidationPipeline:
 
         return validation
 
-    def validate_dtsx_bix_continue_option(self, package):
+    def validate_dtsx_bix_continue_option(
+        self, package: SSISPackage
+    ) -> Validation:
         validation = Validation()
 
         if not package.bix_option_continue_exec:
@@ -584,7 +596,9 @@ class ValidationPipeline:
             )
         return validation
 
-    def validate_dtsx_bix_error_reporting(self, package):
+    def validate_dtsx_bix_error_reporting(
+        self, package: SSISPackage
+    ) -> Validation:
         validation = Validation()
         if (
             package.bix_option_no_report_fail is None
@@ -601,8 +615,8 @@ class ValidationPipeline:
             )
         return validation
 
-    def validate_projects(self, projects):
-        all_validations = []
+    def validate_projects(self, projects: List[SSISProject]) -> List[Any]:
+        all_validations: List[object] = []
 
         for project in projects:
             project_validation = ValidationResult(
@@ -613,7 +627,7 @@ class ValidationPipeline:
                     self.validate_dtproj_protection_level(project),
                     self.validate_dtproj_packages(project),
                     self.validate_dtproj_package_linking(project),
-                    self.validate_deployment_model(project)
+                    self.validate_deployment_model(project),
                 ],
             )
 
@@ -638,7 +652,7 @@ class ValidationPipeline:
 
         return all_validations
 
-    def print_validation_result(self):
+    def print_validation_result(self) -> None:
         print()
         project_validation_successful = True
         for project, packages in self.validated_projects:
@@ -674,23 +688,27 @@ class ValidationPipeline:
                 print()
 
             if packages_validation_successful and project_validation_successful:
-                logger.info(crayons.cyan(f"o  Successfully validated: {project.name}"))
+                logger.info(
+                    crayons.cyan(f"o  Successfully validated: {project.name}")
+                )
             else:
-                logger.info(crayons.cyan(f"o  Failed validating: {project.name}"))
+                logger.info(
+                    crayons.cyan(f"o  Failed validating: {project.name}")
+                )
 
             print()
 
         print("-" * 80)
 
 
-def determine_mode(argv):
+def determine_mode(argv: List[str]) -> Mode:
     if len(argv) == 1:
         return Mode("Repository", [Path.cwd()], True)
 
     return Mode("Directory", [Path(p) for p in argv[1:]], False)
 
 
-def print_mode_info(mode):
+def print_mode_info(mode: Mode) -> None:
     print()
     if mode.is_repo:
         logger.info("o  Mode: Repository")
@@ -699,7 +717,7 @@ def print_mode_info(mode):
         logger.info("o  Mode: Directory")
 
 
-def main():
+def main() -> None:
     mode = determine_mode(sys.argv)
     print_mode_info(mode)
 
