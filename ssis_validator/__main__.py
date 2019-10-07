@@ -48,7 +48,7 @@ def main() -> None:
 
     parser.add_argument(
         "-p",
-        "--projects",
+        "--project",
         action="append",
         required=True,
         help="Path to SSIS Projects",
@@ -58,6 +58,7 @@ def main() -> None:
     args = parser.parse_args()
 
     mode = determine_mode(args)
+
     print_mode_info(mode)
 
     try:
