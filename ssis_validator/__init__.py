@@ -1,19 +1,20 @@
 __version__ = "0.1.0"
 
+import argparse
+import logging
+import sys
+from pathlib import Path
+from typing import Any, List, Optional, Union
+
 import colorama
 import crayons
 import git
-import logging
-import sys
-
 from lxml import etree
-from pathlib import Path
-from typing import List
 
 colorama.init()
 
 logging.basicConfig(
-    format="%(asctime)s %(levelname)s:%(name)s: %(message)s",
+    format="%(asctime)s %(levelname)s %(lineno)d:%(name)s: %(message)s",
     level=logging.DEBUG,
     datefmt="%H:%M:%S",
     stream=sys.stderr,
@@ -140,7 +141,7 @@ class ValidationPipeline:
 
     def __init__(self, mode: Mode) -> None:
         self.mode: Mode = mode
-        self.validated_projects: List[object] = []
+        self.validated_projects: List[Any] = []
 
     def run(self) -> None:
         try:
@@ -168,11 +169,12 @@ class ValidationPipeline:
     def _get_repo_changes(self, current_directory: Path) -> List[Path]:
         if not (current_directory / ".git").exists():
             raise CIException(
-                "No repository found, place executable inside a repository"
+                "No repository found, navigate inside a repository "
+                "with multiple SSIS project directories present"
             )
 
         return [
-            Path(x.a_path)
+            current_directory / Path(x.a_path)
             for x in git.Repo(current_directory).index.diff("HEAD")
             if Path(x.a_path).suffix == ".dtproj"
         ]
@@ -226,6 +228,9 @@ class ValidationPipeline:
     @staticmethod
     def _parse_dtproj_file(dtproj: SSISProject) -> SSISProject:
         parsed_xml = ValidationPipeline._read_xml_file(dtproj.path, "utf-8")
+
+        if not parsed_xml:
+            raise FileNotFoundError("No DTPROJ file was found")
 
         ssis_namespace = {"SSIS": "www.microsoft.com/SqlServer/SSIS"}
 
@@ -701,11 +706,16 @@ class ValidationPipeline:
         print("-" * 80)
 
 
-def determine_mode(argv: List[str]) -> Mode:
-    if len(argv) == 1:
-        return Mode("Repository", [Path.cwd()], True)
+def determine_mode(args: List[str]) -> Mode:
+    mode = None
+    if args.repository and args.repository is not None:
+        mode = Mode("Repository", [Path(args.projects[0])], True)
+    elif args.projects is not None:
+        mode = Mode("Directory", [Path(p) for p in args.projects], False)
+    else:
+        raise ValueError("Invalid argument provided")
 
-    return Mode("Directory", [Path(p) for p in argv[1:]], False)
+    return mode
 
 
 def print_mode_info(mode: Mode) -> None:
@@ -718,7 +728,31 @@ def print_mode_info(mode: Mode) -> None:
 
 
 def main() -> None:
-    mode = determine_mode(sys.argv)
+    parser = argparse.ArgumentParser(
+        prog="ssis_validator",
+        description="Validates SSIS Package XML file to ensure consistent"
+        "configuration per predefined specifications",
+    )
+
+    parser.add_argument(
+        "-r",
+        "--repository",
+        action="store_true",
+        help="Flag for whether validating staging of a Git repository",
+    )
+
+    parser.add_argument(
+        "-p",
+        "--projects",
+        action="append",
+        required=True,
+        help="Path to SSIS Projects",
+        metavar="PROJECT_NAME",
+    )
+
+    args = parser.parse_args()
+
+    mode = determine_mode(args)
     print_mode_info(mode)
 
     try:
@@ -727,7 +761,7 @@ def main() -> None:
         validation_pipeline.print_validation_result()
     except Exception as e:
         print()
-        logger.error(crayons.red(e))
+        logger.exception(crayons.red(e))
         sys.exit(1)
 
 
