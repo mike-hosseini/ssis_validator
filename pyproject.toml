@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ssis_validator"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python package for validating SQL Server Integration Services (SSIS) packages"
 homepage = "https://github.com/mahdi-hosseini/ssis_validator"
 repository = "https://github.com/mahdi-hosseini/ssis_validator"

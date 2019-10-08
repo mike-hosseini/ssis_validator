@@ -168,11 +168,28 @@ class ValidationPipeline:
                 "with multiple SSIS project directories present"
             )
 
-        return [
-            current_directory / Path(x.a_path)
-            for x in git.Repo(current_directory).index.diff("HEAD")
-            if Path(x.a_path).suffix == ".dtproj"
-        ]
+        changed_projects = set()
+
+        def find_dtproj(path):
+            if path == current_directory:
+                return
+            else:
+                dtproj_files = path.rglob("*.dtproj")
+                if dtproj_files:
+                    for dtproj in dtproj_files:
+                        changed_projects.add(dtproj)
+                    return
+                else:
+                    find_dtproj(path.parent)
+        
+        for x in git.Repo(current_directory).index.diff("HEAD"):
+            blob_path = current_directory / Path(x.a_path)
+            if blob_path.suffix == ".dtproj":
+                changed_projects.add(blob_path)
+            else:
+                find_dtproj(blob_path if blob_path.is_dir() else blob_path.parent)
+
+        return list(changed_projects)
 
     def _get_ssis_projects(self, projects: List[Path]) -> List[SSISProject]:
         dtproj_files = [SSISProject(dtproj.stem, dtproj) for dtproj in projects]

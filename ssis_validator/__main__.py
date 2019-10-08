@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 def determine_mode(args: List[str]) -> Mode:
     mode = None
     if args.repository and args.repository is not None:
-        mode = Mode("Repository", [Path(args.projects[0])], True)
-    elif args.projects is not None:
-        mode = Mode("Directory", [Path(p) for p in args.projects], False)
+        mode = Mode("Repository", [Path(args.project[0])], True)
+    elif args.project is not None:
+        mode = Mode("Directory", [Path(p) for p in args.project], False)
     else:
         raise ValueError("Invalid argument provided")
 
@@ -67,7 +67,7 @@ def main() -> None:
         validation_pipeline.print_validation_result()
     except Exception as e:
         print()
-        logger.exception(crayons.red(e))
+        logger.error(crayons.red(e))
         sys.exit(1)
 
 
